@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deploy Contract</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/web3/4.1.2/web3.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+            background: white;
+            color: black;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        #container {
+            border: 2px solid black;
+            padding: 20px;
+            border-radius: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            background: black;
+            color: white;
+            border-radius: 5px;
+            font-weight: bold;
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <h2>Deploy Contract</h2>
+        <button id="connectBtn" onclick="connectOKXWallet()">Connect</button>
+        <button id="deployBtn" onclick="deployContract()" disabled>Deploy Contract</button>
+        <p><strong>Address:</strong> <span id="address">-</span></p>
+        <p><strong>Balance:</strong> <span id="balance">-</span> ETH</p>
+        <p><strong>Network:</strong> <span id="network">-</span></p>
+        <p><strong>Contract Address:</strong> <span id="contractAddress">-</span></p>
+    </div>
+
+    <script>
+        let web3, userAccount;
+        let contractABI, contractBytecode;
+
+        async function connectOKXWallet() {
+            if (window.okxwallet) {
+                try {
+                    web3 = new Web3(window.okxwallet);
+                    const accounts = await window.okxwallet.request({ method: 'eth_requestAccounts' });
+                    userAccount = accounts[0];
+                    const balance = await web3.eth.getBalance(userAccount);
+                    const networkId = await web3.eth.net.getId();
+                    const networkName = getNetworkName(networkId);
+                    
+                    document.getElementById("address").textContent = userAccount;
+                    document.getElementById("balance").textContent = web3.utils.fromWei(balance, "ether");
+                    document.getElementById("network").textContent = networkName;
+                    document.getElementById("connectBtn").textContent = "Connected";
+                    document.getElementById("deployBtn").disabled = false;
+                    
+                    await loadContractFiles();
+                } catch (error) {
+                    console.error("Connection error", error);
+                }
+            } else {
+                alert("OKX Wallet not detected. Please install OKX Extension Wallet.");
+            }
+        }
+
+        async function loadContractFiles() {
+            try {
+                const abiResponse = await fetch('SimpleStorage_abi.json');
+                contractABI = await abiResponse.json();
+                const bytecodeResponse = await fetch('SimpleStorage_bytecode.txt');
+                contractBytecode = await bytecodeResponse.text();
+            } catch (error) {
+                console.error("Failed to load contract files", error);
+            }
+        }
+
+        async function deployContract() {
+            if (!contractABI || !contractBytecode) {
+                alert("Contract ABI or Bytecode not loaded");
+                return;
+            }
+            try {
+                const contract = new web3.eth.Contract(contractABI);
+                const deployTx = contract.deploy({ data: contractBytecode });
+                const gasEstimate = await deployTx.estimateGas({ from: userAccount });
+                
+                const newContract = await deployTx.send({
+                    from: userAccount,
+                    gas: gasEstimate
+                });
+                
+                document.getElementById("contractAddress").textContent = newContract.options.address;
+                alert("Contract deployed at: " + newContract.options.address);
+            } catch (error) {
+                console.error("Deployment error", error);
+                alert("Failed to deploy contract");
+            }
+        }
+
+        function getNetworkName(networkId) {
+            const networks = {
+                1: "Ethereum Mainnet",
+                56: "Binance Smart Chain",
+                137: "Polygon",
+                43114: "Avalanche",
+                250: "Fantom"
+            };
+            return networks[networkId] || `Network ID: ${networkId}`;
+        }
+    </script>
+</body>
+</html>
